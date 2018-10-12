@@ -42,21 +42,23 @@
 */
 
 //==============Pins===========================
-#define MOTOR_RF 12
-#define MOTOR_RB 4
+#define MOTOR_RF 4
+#define MOTOR_RB 12
 #define MOTOR_LF 16
 #define MOTOR_LB 14
 
 //==============Constants======================
 const String chunnel = "#chatrooms:32178044:4e7e70a1-ee13-41b2-a202-3a9cdbec4653";
 const String userName = "bother_tank";
-const int mSout = 1000;
+const int msOut = 400;
+const int speedLimit = 125; //0-255 for pwm shenanigans
 
 //==============Globals========================
 int state = 0;
 String msg = "";
 String command = "";
 unsigned long timer = 0;
+bool cmdFlag = 1;
 
 //==============Library stuff==================
 //espWIFI
@@ -69,7 +71,7 @@ void setup() {
   WiFi.begin(ssid, password);
 
   //OTA stuffs
-  ArduinoOTA.setHostname("TankBot");
+  //ArduinoOTA.setHostname("TankBot");
   ArduinoOTA.begin();
 
   //serial
@@ -87,9 +89,8 @@ void setup() {
   digitalWrite(MOTOR_RB, LOW);
   digitalWrite(MOTOR_LF, LOW);
   digitalWrite(MOTOR_LB, LOW);
-
-
 }
+
 //======FUNCTIONS THAT MAKE THE DO THINGS=======
 typedef void (*CmdList)();
 const static struct cmds {
@@ -201,17 +202,28 @@ void ircConnect() {
 
 void cmdTimeout() {
   unsigned long currentMillis = millis();
-  if (currentMillis - timer > mSout) {
+  client.loop();
+  if (currentMillis - timer > msOut) {
+    cmdFlag = 1;
+  }
+  
+}
+
+void clientTime(int delayer){
+  unsigned long currentMillis = millis();
+  while(currentMillis + delayer < millis()){
+    ArduinoOTA.handle();
     client.loop();
-    timer = millis();
   }
 }
 
 void answerMachine(IRCMessage hollaBack) {
-  if (hollaBack.nick != userName) {
+  if (hollaBack.nick != userName && cmdFlag == 1) {
     for (int i = 0; i < ppSize ; i++) {
       if (hollaBack.text.equalsIgnoreCase(ppList[i].command)) {
+        cmdFlag = 0;
         ppList[i].func();
+        timer = millis();
         break;
       }
     }
@@ -231,45 +243,40 @@ void blinkenLight(int miller_time) {
 //==============BOT FUNCTIONS================
 void forward() {
   sendTwitchMessage("tendies on!");
-  digitalWrite(MOTOR_RF, HIGH);
-  digitalWrite(MOTOR_LF, HIGH);
-  delay(400);
+  analogWrite(MOTOR_RF, speedLimit);
+  analogWrite(MOTOR_LF, speedLimit);
+  clientTime(200);
   digitalWrite(MOTOR_RF, LOW);
   digitalWrite(MOTOR_LF, LOW);
-  delay(1000);
 }
 
 void back() {
   sendTwitchMessage("tendies retreat!");
-  digitalWrite(MOTOR_RB, HIGH);
-  digitalWrite(MOTOR_LB, HIGH);
-  delay(400);
+  analogWrite(MOTOR_RB, speedLimit);
+  analogWrite(MOTOR_LB, speedLimit);
+  clientTime(200);
   digitalWrite(MOTOR_RB, LOW);
   digitalWrite(MOTOR_LB, LOW);
-  delay(1000);
 }
 
 void left() {
   sendTwitchMessage("tendies left");
-  digitalWrite(MOTOR_RF, HIGH);
-  digitalWrite(MOTOR_LB, HIGH);
-  delay(400);
+  analogWrite(MOTOR_RF, speedLimit);
+  analogWrite(MOTOR_LB, speedLimit);
+  clientTime(200);
   digitalWrite(MOTOR_RF, LOW);
   digitalWrite(MOTOR_LB, LOW);
-  delay(1000);
 }
 
 void right() {
   sendTwitchMessage("tendies right!");
-  digitalWrite(MOTOR_RB, HIGH);
-  digitalWrite(MOTOR_LF, HIGH);
-  delay(400);
+  analogWrite(MOTOR_RB, speedLimit);
+  analogWrite(MOTOR_LF, speedLimit);
+  clientTime(200);
   digitalWrite(MOTOR_RB, LOW);
   digitalWrite(MOTOR_LF, LOW);
-  delay(1000);
 }
 
 void attack() {
   sendTwitchMessage("REEEEEEEEE");
-  delay(1000);
 }
