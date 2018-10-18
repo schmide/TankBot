@@ -62,14 +62,17 @@
 //==============Constants======================
 const String chunnel = "#chatrooms:32178044:4e7e70a1-ee13-41b2-a202-3a9cdbec4653";
 const String userName = "bother_tank";
-const int cmdTime = 200; //for now put commands on a fixed timer
+const int ramper = 10; //0 to 255 I guess
+const int cmdTime = 400; //ms [replace later]
+const int governator = 255;
 
 //==============Globals========================
 int state = 0;
-bool cmdRollout = 0;
-int cmdInsert = 1;
-int cmdArray[50];
-
+uint8_t cmdInsert = 1;
+uint8_t cmdArray[50];
+int treadRightSpeed = 0;
+int treadLeftSpeed = 0;
+unsigned long cmdStartTime = 0;
 
 //==============Library stuff==================
 //espWIFI
@@ -114,14 +117,13 @@ const static struct cmds {
   CmdList func;
   //  const char *desc;
 } ppList[] = {
-  {"secretCommand", halt},
-  {"s", stahp},
+  {"s", halt},
   {"f", forward},
   {"b", back},
   {"l", left},
   {"r", right},
   {"a", attack},
-  {"stop", stahp},
+  {"stop", halt},
   {"forward", forward},
   {"back", back},
   {"left", left},
@@ -136,6 +138,7 @@ void loop() {
   ArduinoOTA.handle();
   connectMachine();
   doCommands();
+  pinOutputter();
   checkConnect();
 }
 
@@ -178,12 +181,16 @@ void answerMachine(IRCMessage hollaBack) {
         
         //deal with the array if it needs to shift
         if( cmdInsert == sizeof(cmdArray)-1 ){
-          shiftArray(); 
+          shiftArrayInsert(); 
         }
         
         //put command in array position
         cmdArray[cmdInsert] = i;
-        cmdInsert++;
+        
+        if( cmdInsert != sizeof(cmdArray)-1 ){
+          cmdInsert++;
+        }
+        
         break;
 
         //get the numerical command timer
@@ -195,13 +202,40 @@ void answerMachine(IRCMessage hollaBack) {
 }
 
 void doCommands(){
-  //timer stuff here.
-  cmd = cmdArray[0];
-  shiftArray();
-  if(cmdInsert > 1){cmdInsert--;}
+  unsigned long timeywimey = millis();
+  if(cmdStartTime + cmdTime < timeywimey){
+    shiftArray();
+    cmdStartTime = millis();
+  }
+  int cmd = cmdArray[0];
   ppList[cmd].func();
+}
 
-  //time iterator too for performances
+void pinOutputter(){
+  treadRightSpeed = constrain(treadRightSpeed, -governator, governator);
+  treadLeftSpeed = constrain(treadLeftSpeed, -governator, governator);
+  
+  if(treadRightSpeed > 0){
+    analogWrite(MOTOR_RB, 0);
+    analogWrite(MOTOR_RF, abs(treadRightSpeed));
+  }else if(treadRightSpeed < 0){
+    analogWrite(MOTOR_RF, 0);
+    analogWrite(MOTOR_RB, abs(treadRightSpeed));
+  }else{
+    analogWrite(MOTOR_RF, 0);
+    analogWrite(MOTOR_RB, 0);
+  }
+  
+  if(treadLeftSpeed > 0){
+    analogWrite(MOTOR_LB, 0);
+    analogWrite(MOTOR_LF, abs(treadLeftSpeed));
+  }else if(treadLeftSpeed < 0){
+    analogWrite(MOTOR_LF, 0);
+    analogWrite(MOTOR_LB, abs(treadLeftSpeed));
+  }else{
+    analogWrite(MOTOR_LF, 0);
+    analogWrite(MOTOR_LB, 0);
+  }
 }
 
 //==============Secondary Functions=============
@@ -269,8 +303,20 @@ void blinkenLight(int miller_time) {
   delay(miller_time);
 }
 
+//move over the command array at the completion of a function
 void shiftArray(){
-  for(i = 0 ; i < sizeof(cmdArray)-2 ; i++){
+  for(int i = 1 ; i <= sizeof(cmdArray)-2 ; i++){
+    cmdArray[i] = cmdArray[i+1];
+  }
+  cmdArray[ sizeof(cmdArray)-1 ] = 0;
+  if(cmdInsert > 1){
+    cmdInsert--;
+  }
+}
+
+//move over the command array to make room for a fat ass command
+void shiftArrayInsert(){
+  for(int i = 1 ; i <= sizeof(cmdArray)-2 ; i++){
     cmdArray[i] = cmdArray[i+1];
   }
   cmdArray[ sizeof(cmdArray)-1 ] = 0;
@@ -282,38 +328,46 @@ void shiftArray(){
 //stop is insta-stop
 
 void halt(){
-  //non-chatty stop
-  digitalWrite(MOTOR_RF, LOW);
-  digitalWrite(MOTOR_LF, LOW);
-  digitalWrite(MOTOR_RB, LOW);
-  digitalWrite(MOTOR_LB, LOW);
-}
-
-void stahp() { 
-  sendTwitchMessage("tendies NO!");
-  digitalWrite(MOTOR_RF, LOW);
-  digitalWrite(MOTOR_LF, LOW);
-  digitalWrite(MOTOR_RB, LOW);
-  digitalWrite(MOTOR_LB, LOW);
+  if(treadRightSpeed > 0){
+    treadRightSpeed -= ramper;
+    treadRightSpeed = constrain(treadRightSpeed, 0, governator);
+  }else if(treadRightSpeed < 0){
+    treadRightSpeed += ramper;
+    treadRightSpeed = constrain(treadRightSpeed, -governator, 0);
+  }
+  
+  if(treadLeftSpeed > 0){
+    treadLeftSpeed -= ramper;
+    treadLeftSpeed = constrain(treadLeftSpeed, 0, governator);
+  }else if(treadLeftSpeed < 0){
+    treadLeftSpeed += ramper;
+    treadLeftSpeed = constrain(treadLeftSpeed, -governator, 0);
+  }
 }
 
 void forward() {
-  sendTwitchMessage("tendies on!");
-    
+  //sendTwitchMessage("tendies on!");
+  treadRightSpeed += ramper;
+  treadLeftSpeed += ramper;
 }
 
 void back() {
-  sendTwitchMessage("tendies retreat!");
-    
+  //sendTwitchMessage("tendies retreat!");
+  treadRightSpeed -= ramper;
+  treadLeftSpeed -= ramper;
 }
 
 void left() {
-  sendTwitchMessage("tendies left");
+  //sendTwitchMessage("tendies left");
+  treadRightSpeed -= ramper;
+  treadLeftSpeed += ramper;
   
 }
 
 void right() {
-  sendTwitchMessage("tendies right!");
+  //sendTwitchMessage("tendies right!");
+  treadRightSpeed += ramper;
+  treadLeftSpeed -= ramper;
 
 }
 
